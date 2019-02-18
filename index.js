@@ -1,11 +1,7 @@
 const config = require('./config')
-
 const apiFactory = require('2sucres-api')
 const api = apiFactory(config.cookies, config.csrf)
 const sqlite3 = require('sqlite3').verbose(); 
-
-const CHURCH_ID = 101523;
-const CHURCH_HEAD = 1756239;
 const CHURCH_DB = new sqlite3.Database('./db/church.db', sqlite3.OPEN_READWRITE, (err) => {
     if (err) {
         console.error(err.message);
@@ -13,11 +9,11 @@ const CHURCH_DB = new sqlite3.Database('./db/church.db', sqlite3.OPEN_READWRITE,
     console.log('Connected to the Church database.');
 });
 
-
+// Running the Church
 async function run () {
-    console.log("Church n°"+CHURCH_ID)
+    console.log("Church n°"+config.id)
 
-    await core(CHURCH_ID, CHURCH_DB)
+    await core(config.id, CHURCH_DB)
 
     // Close the database connection
     CHURCH_DB.close((err) => {
@@ -27,10 +23,11 @@ async function run () {
     });
 }
 
+// Core function looping
 async function core() {
-    const topic = await api.getTopic(CHURCH_ID)
-    api.editMessage(CHURCH_HEAD, `Il y a ${topic.messageCount} messages ici`)
-    const messages = await api.getMessages(CHURCH_ID)
+    const topic = await api.getTopic(config.id)
+    api.editMessage(config.head, `Il y a ${topic.messageCount} messages ici`)
+    const messages = await api.getMessages(config.id)
     console.log(messages)
     for (const message in messages) {
         if (messages.hasOwnProperty(message)) {
@@ -58,14 +55,16 @@ async function core() {
     });
 }
 
+// Closes the Church
 async function close(){
-    await api.postMessage(CHURCH_ID, "Fermeture");
-    await api.lockTopic(CHURCH_ID)
+    await api.postMessage(config.id, "Fermeture");
+    await api.lockTopic(config.id)
 }
 
+// Opens the Church
 async function open(){
-    await api.unlockTopic(CHURCH_ID)
-    await api.postMessage(CHURCH_ID, "Ouverture");
+    await api.unlockTopic(config.id)
+    await api.postMessage(config.id, "Ouverture");
 }
  
 run().catch(err => {
