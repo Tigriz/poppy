@@ -2,7 +2,7 @@ const config = require('./config')
 const apiFactory = require('2sucres-api')
 const api = apiFactory(config.cookies, config.csrf)
 const sqlite3 = require('sqlite3').verbose(); 
-const CHURCH_DB = new sqlite3.Database('./db/church.db', sqlite3.OPEN_READWRITE, (err) => {
+const db = new sqlite3.Database('./db/church.db', sqlite3.OPEN_READWRITE, (err) => {
     if (err) {
         console.error(err.message);
     }
@@ -12,11 +12,11 @@ const CHURCH_DB = new sqlite3.Database('./db/church.db', sqlite3.OPEN_READWRITE,
 // Running the Church
 async function run () {
     console.log("Church n°"+config.id)
-
-    await core(config.id, CHURCH_DB)
+    
+    await core()
 
     // Close the database connection
-    CHURCH_DB.close((err) => {
+    db.close((err) => {
         if (err) {
             return console.error(err.message);
         }
@@ -25,46 +25,49 @@ async function run () {
 
 // Core function looping
 async function core() {
-    const topic = await api.getTopic(config.id)
-    api.editMessage(config.head, `Il y a ${topic.messageCount} messages ici`)
-    const messages = await api.getMessages(config.id)
-    console.log(messages)
-    for (const message in messages) {
-        if (messages.hasOwnProperty(message)) {
-            const element = messages[message];
-            CHURCH_DB.get(`SELECT points FROM seeds WHERE user = ?`, [element.user.id], (err, row) => {
-                if (err) {
-                  return console.error(err.message);
-                }
-                if(row == undefined)
-                    CHURCH_DB.run(`INSERT INTO seeds(user, points) VALUES(${element.user.id},1)`);
-                else CHURCH_DB.run(`UPDATE seeds SET points = ? WHERE user = ?`, [parseInt(row.points)+1, element.user.id])
-              });
-        }
-    }
+    await open();
+    let counts = {}
+    let messages = await api.getMessages(config.id) 
+    messages.filter(function(obj) { return obj.user.id }).map(function(obj) { return obj.user.id }).forEach(function(x) { counts[x] = (counts[x] || 0)+1; });
 
-    CHURCH_DB.all(`SELECT user, points FROM seeds
-    ORDER BY user`, [], (err, rows) => {
-        if (err) {
-            throw err;
-        }
-        console.log("== CHURCH_DB ==")
-        rows.forEach((row) => {
-            console.log(row);
-        });
+    console.log(counts)
+    
+    Object.getOwnPropertyNames( counts ).forEach( function( key ){
+        db.run(`UPDATE seeds SET points = ? WHERE user = ?`, [counts[key], key])
     });
+
+    printAll();
+    setTimeout(() => close(), 60000)
+
+    core()
 }
 
 // Closes the Church
 async function close(){
     await api.postMessage(config.id, "Fermeture");
-    await api.lockTopic(config.id)
+    setTimeout(() => api.lockTopic(config.id), 100)
 }
 
 // Opens the Church
 async function open(){
     await api.unlockTopic(config.id)
-    await api.postMessage(config.id, "Ouverture");
+    setTimeout(() => api.postMessage(config.id, "Ouverture"), 100)
+}
+
+function printAll(){
+    db.all(`SELECT user, pseudo, points FROM seeds
+    ORDER BY user`, [], (err, rows) => {
+        if (err) {
+            throw err;
+        }
+        console.log("== Database ==")
+        let string = "**Database** \n | User ID | User name | Points \n |:"
+        rows.forEach((row) => {
+            console.log(row)
+            string += "\n | "+row.user+" | "+row.pseudo+" | "+row.points;
+        });
+        api.editMessage(config.head, string)
+    });
 }
  
 run().catch(err => {
